@@ -1,0 +1,92 @@
+# 导入聚宽函数库
+from jqdata import *
+
+# ==========================================
+# 第一部分：初始化函数
+# ==========================================
+def initialize(context):
+    set_benchmark('000300.XSHG')
+    set_option('use_real_price', True)
+    
+    # 手续费：佣金万三，最低5元（注意：频繁调仓时，这5元会成为利润杀手）
+    set_order_cost(OrderCost(close_tax=0, open_commission=0.0003, close_commission=0.0003, min_commission=5), type='fund')
+
+    # 改良版永久组合配方
+    g.assets = {
+        '510300.XSHG': 0.125,  # 沪深300
+        '513100.XSHG': 0.125,  # 纳指100
+        '511260.XSHG': 0.25,   # 10年国债
+        '518880.XSHG': 0.25,   # 黄金ETF
+        '511880.XSHG': 0.25    # 银华日利 (现金)
+    }
+    
+    # 记录上次调仓的月份
+    g.last_rebalance_month = 0
+    # 记录每个资产第一天上市的价格，用于计算相对净值
+    g.init_prices = {}
+
+# ==========================================
+# 第二部分：每日运行函数
+# ==========================================
+def handle_data(context, data):
+    current_year = context.current_dt.year
+    current_month = context.current_dt.month
+
+    # --------------------------------------------------------
+    # 【新增功能】：每天画出 5 个资产的相对净值曲线
+    # --------------------------------------------------------
+    for asset in g.assets.keys():
+        if get_security_info(asset).start_date <= context.current_dt.date():
+            # 获取该资产今天的收盘价
+            current_price = attribute_history(asset, 1, '1d', ['close'])['close'][0]
+            
+            # 如果是第一次见到这个资产，把今天设为起步价 (净值 1.0)
+            if asset not in g.init_prices:
+                g.init_prices[asset] = current_price
+                
+            # 计算动态净值 = 现价 / 起步价
+            net_value = current_price / g.init_prices[asset]
+            
+            # 使用 record 函数画图 (使用英文标签防止乱码)
+            if '510300' in asset: record(HS300=net_value)
+            elif '513100' in asset: record(NASDAQ=net_value)
+            elif '511260' in asset: record(BOND=net_value)
+            elif '518880' in asset: record(GOLD=net_value)
+            elif '511880' in asset: record(CASH=net_value)
+
+    # --------------------------------------------------------
+    # 【核心逻辑】：只要当前月份和上次调仓月份不同，就执行【月度调仓】
+    # --------------------------------------------------------
+    if current_month != g.last_rebalance_month:
+        print(f"\n=== {context.current_dt.strftime('%Y-%m-%d')} 执行【月度】强制再平衡 ===")
+        
+        total_value = context.portfolio.total_value
+        
+        # 筛选可交易标的
+        tradeable_assets = []
+        for asset in g.assets.keys():
+            if get_security_info(asset).start_date <= context.current_dt.date():
+                tradeable_assets.append(asset)
+
+        # 第一步：先只做卖出（止盈）
+        for asset in tradeable_assets:
+            weight = g.assets[asset]
+            target_value = total_value * weight
+            current_value = context.portfolio.positions[asset].value
+            
+            if current_value > target_value:
+                order_target_value(asset, target_value)
+                print(f"🔻 月度卖出：{asset} 降至 {target_value:.2f} 元")
+
+        # 第二步：再只做买入（抄底）
+        for asset in tradeable_assets:
+            weight = g.assets[asset]
+            target_value = total_value * weight
+            current_value = context.portfolio.positions[asset].value if asset in context.portfolio.positions else 0
+            
+            if current_value < target_value:
+                order_target_value(asset, target_value)
+                print(f"🔺 月度买入：{asset} 增至 {target_value:.2f} 元")
+
+        # 更新调仓月份标记
+        g.last_rebalance_month = current_month
