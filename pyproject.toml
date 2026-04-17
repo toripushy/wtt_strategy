@@ -3,7 +3,10 @@ name = "btcore"
 version = "0.1.0"
 description = "Local strategy backtesting CLI with daily and minute-bar support."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "numpy>=1.24",
+  "pandas>=2.0",
+]
 
 [project.scripts]
 bt = "btcore.cli:main"
