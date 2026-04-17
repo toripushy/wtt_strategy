@@ -4,7 +4,9 @@ from btcore.engine import run
 from btcore.models import BacktestConfig
 
 
-def test_next_open_fill_uses_next_bar(tmp_path: Path):
+def test_next_open_fill_uses_next_bar(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("JQDATA_USERNAME", raising=False)
+    monkeypatch.delenv("JQDATA_PASSWORD", raising=False)
     strategy = tmp_path / "strategies" / "buy_once.py"
     strategy.parent.mkdir()
     strategy.write_text(
@@ -27,7 +29,9 @@ def test_next_open_fill_uses_next_bar(tmp_path: Path):
     assert result.trades[0].timestamp == "2026-01-05T09:31:00"
 
 
-def test_smoke_5m_from_1m(tmp_path: Path):
+def test_smoke_5m_from_1m(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("JQDATA_USERNAME", raising=False)
+    monkeypatch.delenv("JQDATA_PASSWORD", raising=False)
     strategy = tmp_path / "strategies" / "ma.py"
     strategy.parent.mkdir()
     strategy.write_text(Path("strategies/moving_average.py").read_text(encoding="utf-8").replace('frequency = "1m"', 'frequency = "5m"'), encoding="utf-8")
